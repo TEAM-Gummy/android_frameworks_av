@@ -37,7 +37,9 @@ LOCAL_SHARED_LIBRARIES := \
 # Consider a separate a library for SingleStateQueueInstantiations.
 
 ifeq ($(BOARD_HAVE_PRE_KITKAT_AUDIO_BLOB),true)
-    LOCAL_CFLAGS += -DHAVE_PRE_KITKAT_AUDIO_BLOB
+    LOCAL_CFLAGS += -DHAVE_PRE_KITKAT_AUDIO_BLOB -fno-strict-aliasing
 endif
+
+LOCAL_CFLAGS += -fno-strict-aliasing
 
 include $(BUILD_SHARED_LIBRARY)
