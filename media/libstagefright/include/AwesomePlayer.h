@@ -1,5 +1,7 @@
 /*
  * Copyright (C) 2009 The Android Open Source Project
+ * Copyright (c) 2013, The Linux Foundation. All rights reserved.
+ * Not a Contribution.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -100,8 +102,11 @@ struct AwesomePlayer {
 
     void postAudioEOS(int64_t delayUs = 0ll);
     void postAudioSeekComplete();
-
+    void printFileName(int fd);
     status_t dump(int fd, const Vector<String16> &args) const;
+
+    status_t suspend();
+    status_t resume();
 
 private:
     friend struct AwesomeEvent;
@@ -201,6 +206,12 @@ private:
     bool mWatchForAudioSeekComplete;
     bool mWatchForAudioEOS;
 
+    bool mIsFirstFrameAfterResume;
+
+#ifdef QCOM_HARDWARE
+    static int mTunnelAliveAP;
+#endif
+
     sp<TimedEventQueue::Event> mVideoEvent;
     bool mVideoEventPending;
     sp<TimedEventQueue::Event> mStreamDoneEvent;
@@ -234,6 +245,7 @@ private:
     sp<DecryptHandle> mDecryptHandle;
 
     int64_t mLastVideoTimeUs;
+    int64_t mFrameDurationUs;
     TimedTextDriver *mTextDriver;
 
     sp<WVMExtractor> mWVMExtractor;
@@ -300,6 +312,16 @@ private:
         ASSIGN
     };
     void modifyFlags(unsigned value, FlagMode mode);
+#ifdef USE_TUNNEL_MODE
+    void checkTunnelExceptions();
+#endif
+    void logFirstFrame();
+    void logCatchUp(int64_t ts, int64_t clock, int64_t delta);
+    void logLate(int64_t ts, int64_t clock, int64_t delta);
+    void logOnTime(int64_t ts, int64_t clock, int64_t delta);
+    void printStats();
+    int64_t getTimeOfDayUs();
+    bool mStatistics;
 
     struct TrackStat {
         String8 mMIME;
@@ -325,7 +347,26 @@ private:
         int32_t mVideoHeight;
         uint32_t mFlags;
         Vector<TrackStat> mTracks;
+
+        int64_t mConsecutiveFramesDropped;
+        uint32_t mCatchupTimeStart;
+        uint32_t mNumTimesSyncLoss;
+        uint32_t mMaxEarlyDelta;
+        uint32_t mMaxLateDelta;
+        uint32_t mMaxTimeSyncLoss;
+        uint64_t mTotalFrames;
+        int64_t mFirstFrameLatencyStartUs; //first frame latency start
+        int64_t mFirstFrameLatencyUs;
+        int64_t mLastFrameUs;
+        bool mVeryFirstFrame;
+        int64_t mTotalTimeUs;
+        int64_t mLastPausedTimeMs;
+        int64_t mLastSeekToTimeMs;
+        int64_t mResumeDelayStartUs;
+        int64_t mSeekDelayStartUs;
     } mStats;
+
+    bool mBufferingDone;
 
     status_t setVideoScalingMode(int32_t mode);
     status_t setVideoScalingMode_l(int32_t mode);
@@ -339,6 +380,13 @@ private:
 
     size_t countTracks() const;
 
+#ifdef QCOM_HARDWARE
+#ifdef USE_TUNNEL_MODE
+    bool inSupportedTunnelFormats(const char * mime);
+#endif
+    //Flag to check if tunnel mode audio is enabled
+    bool mIsTunnelAudio;
+#endif
     AwesomePlayer(const AwesomePlayer &);
     AwesomePlayer &operator=(const AwesomePlayer &);
 };

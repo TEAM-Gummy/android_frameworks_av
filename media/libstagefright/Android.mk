@@ -39,6 +39,7 @@ LOCAL_SRC_FILES:=                         \
         NuMediaExtractor.cpp              \
         OMXClient.cpp                     \
         OMXCodec.cpp                      \
+        ExtendedCodec.cpp                 \
         OggExtractor.cpp                  \
         SampleIterator.cpp                \
         SampleTable.cpp                   \
@@ -52,11 +53,14 @@ LOCAL_SRC_FILES:=                         \
         Utils.cpp                         \
         VBRISeeker.cpp                    \
         WAVExtractor.cpp                  \
+        WAVEWriter.cpp                    \
         WVMExtractor.cpp                  \
         XINGSeeker.cpp                    \
         avc_utils.cpp                     \
         mp4/FragmentedMP4Parser.cpp       \
         mp4/TrackFragment.cpp             \
+        ExtendedExtractor.cpp             \
+        QCUtils.cpp                       \
 
 LOCAL_C_INCLUDES:= \
         $(TOP)/frameworks/av/include/media/stagefright/timedtext \
@@ -64,7 +68,50 @@ LOCAL_C_INCLUDES:= \
         $(TOP)/frameworks/native/include/media/openmax \
         $(TOP)/external/flac/include \
         $(TOP)/external/tremolo \
-        $(TOP)/external/openssl/include \
+        $(TOP)/external/openssl/include
+
+ifneq ($(TI_CUSTOM_DOMX_PATH),)
+LOCAL_C_INCLUDES += $(TI_CUSTOM_DOMX_PATH)/omx_core/inc
+LOCAL_CPPFLAGS += -DUSE_TI_CUSTOM_DOMX
+else
+LOCAL_C_INCLUDES += $(TOP)/frameworks/native/include/media/openmax
+endif
+
+ifeq ($(BOARD_USES_STE_FMRADIO),true)
+LOCAL_SRC_FILES += \
+        FMRadioSource.cpp                 \
+        PCMExtractor.cpp
+endif
+
+ifneq ($(filter caf bfam,$(TARGET_QCOM_AUDIO_VARIANT)),)
+    ifeq ($(BOARD_USES_ALSA_AUDIO),true)
+        LOCAL_SRC_FILES += LPAPlayerALSA.cpp
+        ifeq ($(call is-chipset-in-board-platform,msm8960),true)
+            LOCAL_SRC_FILES += TunnelPlayer.cpp
+            LOCAL_CFLAGS += -DUSE_TUNNEL_MODE
+            LOCAL_CFLAGS += -DTUNNEL_MODE_SUPPORTS_AMRWB
+        endif
+        ifeq ($(call is-chipset-in-board-platform,msm8974),true)
+            LOCAL_SRC_FILES += TunnelPlayer.cpp
+            LOCAL_CFLAGS += -DUSE_TUNNEL_MODE
+        endif
+        ifeq ($(NO_TUNNEL_MODE_FOR_MULTICHANNEL),true)
+            LOCAL_CFLAGS += -DNO_TUNNEL_MODE_FOR_MULTICHANNEL
+        endif
+    else
+        LOCAL_SRC_FILES += LPAPlayer.cpp
+        LOCAL_CFLAGS += -DLEGACY_LPA
+    endif
+    LOCAL_CFLAGS += -DQCOM_ENHANCED_AUDIO
+endif
+
+ifneq ($(TARGET_QCOM_MEDIA_VARIANT),)
+LOCAL_C_INCLUDES += \
+        $(TOP)/hardware/qcom/media-$(TARGET_QCOM_MEDIA_VARIANT)/mm-core/inc
+else
+LOCAL_C_INCLUDES += \
+        $(TOP)/hardware/qcom/media/mm-core/inc
+endif
 
 LOCAL_SHARED_LIBRARIES := \
         libbinder \
@@ -91,6 +138,7 @@ LOCAL_SHARED_LIBRARIES := \
 
 LOCAL_STATIC_LIBRARIES := \
         libstagefright_color_conversion \
+        libstagefright_mp3dec \
         libstagefright_aacenc \
         libstagefright_matroska \
         libstagefright_timedtext \
@@ -116,9 +164,37 @@ LOCAL_SHARED_LIBRARIES += \
 
 LOCAL_CFLAGS += -Wno-multichar
 
+ifeq ($(BOARD_USE_SAMSUNG_COLORFORMAT), true)
+LOCAL_CFLAGS += -DUSE_SAMSUNG_COLORFORMAT
+
+# Include native color format header path
+LOCAL_C_INCLUDES += \
+	$(TOP)/hardware/samsung/exynos4/hal/include \
+	$(TOP)/hardware/samsung/exynos4/include
+
+endif
+
+ifeq ($(BOARD_USE_TI_DUCATI_H264_PROFILE), true)
+LOCAL_CFLAGS += -DUSE_TI_DUCATI_H264_PROFILE
+endif
+
 LOCAL_MODULE:= libstagefright
 
 LOCAL_MODULE_TAGS := optional
+
+
+ifeq ($(TARGET_ENABLE_QC_AV_ENHANCEMENTS),true)
+    LOCAL_CFLAGS += -DENABLE_QC_AV_ENHANCEMENTS
+    LOCAL_SRC_FILES  += ExtendedWriter.cpp
+    LOCAL_SRC_FILES  += QCMediaDefs.cpp
+    ifneq ($(TARGET_QCOM_MEDIA_VARIANT),)
+        LOCAL_C_INCLUDES += \
+            $(TOP)/hardware/qcom/media-$(TARGET_QCOM_MEDIA_VARIANT)/mm-core/inc
+    else
+        LOCAL_C_INCLUDES += \
+            $(TOP)/hardware/qcom/media/mm-core/inc
+    endif
+endif #TARGET_ENABLE_QC_AV_ENHANCEMENTS
 
 include $(BUILD_SHARED_LIBRARY)
 

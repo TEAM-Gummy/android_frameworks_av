@@ -30,6 +30,7 @@
 #include <gui/Surface.h>
 #include <utils/String8.h>
 #include <cutils/properties.h>
+#include "include/QCUtils.h"
 
 namespace android {
 
@@ -96,11 +97,20 @@ static int32_t getColorFormat(const char* colorFormat) {
     }
 
     if (!strcmp(colorFormat, CameraParameters::PIXEL_FORMAT_YUV420SP)) {
+#ifdef USE_SAMSUNG_COLORFORMAT
+        static const int OMX_SEC_COLOR_FormatNV12LPhysicalAddress = 0x7F000002;
+        return OMX_SEC_COLOR_FormatNV12LPhysicalAddress;
+#else
         return OMX_COLOR_FormatYUV420SemiPlanar;
+#endif
     }
 
     if (!strcmp(colorFormat, CameraParameters::PIXEL_FORMAT_YUV422I)) {
+#if defined(TARGET_OMAP3) && defined(OMAP_ENHANCEMENT)
+        return OMX_COLOR_FormatCbYCrY;
+#else
         return OMX_COLOR_FormatYCbYCr;
+#endif
     }
 
     if (!strcmp(colorFormat, CameraParameters::PIXEL_FORMAT_RGB565)) {
@@ -563,6 +573,9 @@ status_t CameraSource::initWithCameraAccess(
     mMeta->setInt32(kKeyStride,      mVideoSize.width);
     mMeta->setInt32(kKeySliceHeight, mVideoSize.height);
     mMeta->setInt32(kKeyFrameRate,   mVideoFrameRate);
+
+    QCUtils::HFR::setHFRIfEnabled(params, mMeta);
+
     return OK;
 }
 

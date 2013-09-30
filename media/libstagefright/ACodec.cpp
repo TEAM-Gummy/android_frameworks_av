@@ -1,4 +1,7 @@
 /*
+ * Copyright (c) 2013, The Linux Foundation. All rights reserved.
+ * Not a Contribution.
+ *
  * Copyright (C) 2010 The Android Open Source Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -32,12 +35,18 @@
 #include <media/stagefright/NativeWindowWrapper.h>
 #include <media/stagefright/OMXClient.h>
 #include <media/stagefright/OMXCodec.h>
+#include <media/stagefright/ExtendedCodec.h>
 
 #include <media/hardware/HardwareAPI.h>
 
 #include <OMX_Component.h>
 
+#ifdef USE_SAMSUNG_COLORFORMAT
+#include <sec_format.h>
+#endif
+
 #include "include/avc_utils.h"
+#include "include/QCUtils.h"
 
 namespace android {
 
@@ -363,7 +372,8 @@ ACodec::ACodec()
       mEncoderDelay(0),
       mEncoderPadding(0),
       mChannelMaskPresent(false),
-      mChannelMask(0) {
+      mChannelMask(0),
+      mInSmoothStreamingMode(false) {
     mUninitializedState = new UninitializedState(this);
     mLoadedState = new LoadedState(this);
     mLoadedToIdleState = new LoadedToIdleState(this);
@@ -543,11 +553,22 @@ status_t ACodec::allocateOutputBuffersFromNativeWindow() {
         return err;
     }
 
+#ifdef USE_SAMSUNG_COLORFORMAT
+    OMX_COLOR_FORMATTYPE eNativeColorFormat = def.format.video.eColorFormat;
+    setNativeWindowColorFormat(eNativeColorFormat);
+
+    err = native_window_set_buffers_geometry(
+    mNativeWindow.get(),
+    def.format.video.nFrameWidth,
+    def.format.video.nFrameHeight,
+    eNativeColorFormat);
+#else
     err = native_window_set_buffers_geometry(
             mNativeWindow.get(),
             def.format.video.nFrameWidth,
             def.format.video.nFrameHeight,
             def.format.video.eColorFormat);
+#endif
 
     if (err != 0) {
         ALOGE("native_window_set_buffers_geometry failed: %s (%d)",
@@ -690,6 +711,25 @@ status_t ACodec::allocateOutputBuffersFromNativeWindow() {
     return err;
 }
 
+#ifdef USE_SAMSUNG_COLORFORMAT
+void ACodec::setNativeWindowColorFormat(OMX_COLOR_FORMATTYPE &eNativeColorFormat)
+{
+    // In case of Samsung decoders, we set proper native color format for the Native Window
+    if (!strcasecmp(mComponentName.c_str(), "OMX.SEC.AVC.Decoder")
+        || !strcasecmp(mComponentName.c_str(), "OMX.SEC.FP.AVC.Decoder")) {
+        switch (eNativeColorFormat) {
+            case OMX_COLOR_FormatYUV420SemiPlanar:
+                eNativeColorFormat = (OMX_COLOR_FORMATTYPE)HAL_PIXEL_FORMAT_YCbCr_420_SP;
+                break;
+            case OMX_COLOR_FormatYUV420Planar:
+            default:
+                eNativeColorFormat = (OMX_COLOR_FORMATTYPE)HAL_PIXEL_FORMAT_YCbCr_420_P;
+                break;
+        }
+    }
+}
+#endif
+
 status_t ACodec::cancelBufferToNativeWindow(BufferInfo *info) {
     CHECK_EQ((int)info->mStatus, (int)BufferInfo::OWNED_BY_US);
 
@@ -817,6 +857,10 @@ status_t ACodec::setComponentRole(
             "audio_decoder.amrnb", "audio_encoder.amrnb" },
         { MEDIA_MIMETYPE_AUDIO_AMR_WB,
             "audio_decoder.amrwb", "audio_encoder.amrwb" },
+#ifdef ENABLE_QC_AV_ENHANCEMENTS
+        { MEDIA_MIMETYPE_AUDIO_AMR_WB_PLUS,
+            "audio_decoder.amrwbplus", "audio_encoder.amrwbplus" },
+#endif
         { MEDIA_MIMETYPE_AUDIO_AAC,
             "audio_decoder.aac", "audio_encoder.aac" },
         { MEDIA_MIMETYPE_AUDIO_VORBIS,
@@ -1546,6 +1590,9 @@ status_t ACodec::setupVideoDecoder(
     if (err != OK) {
         return err;
     }
+
+    ExtendedCodec::enableSmoothStreaming(
+            mOMX, mNode, &mInSmoothStreamingMode, mComponentName.c_str());
 
     return OK;
 }
