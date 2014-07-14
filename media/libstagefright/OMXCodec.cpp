@@ -462,7 +462,9 @@ sp<MediaSource> OMXCodec::Create(
     Vector<CodecNameAndQuirks> matchingCodecs;
 
 #ifdef QCOM_HARDWARE
-    if (ExtendedCodec::useHWAACDecoder(mime)) {
+    int channelCount = 0;
+    meta->findInt32(kKeyChannelCount, &channelCount);
+    if (ExtendedCodec::useHWAACDecoder(mime, channelCount) && !createEncoder) {
         findMatchingCodecs(mime, createEncoder,
             "OMX.qcom.audio.decoder.multiaac", flags, &matchingCodecs);
     } else {
@@ -913,6 +915,8 @@ status_t OMXCodec::configureCodec(const sp<MetaData> &meta) {
             }
 
 #ifdef QCOM_HARDWARE
+            ExtendedCodec::configureFramePackingFormat(
+                    meta, mOMX, mNode, mComponentName);
             ExtendedCodec::enableSmoothStreaming(
                     mOMX, mNode, &mInSmoothStreamingMode, mComponentName);
 #endif
